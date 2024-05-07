@@ -27,7 +27,7 @@ inputs:
   maxNewTokens:
     description: "The amount of new tokens to be generated, this does not include the input length it is a estimate of the size of generated text you want. Each new tokens slows down the request, so look for balance between response times and length of text generated."
     required: false
-    default: "1024"
+    default: "8192"
   temperature:
     description: "The temperature of the sampling operation. 1 means regular sampling, 0 means always take the highest score, 100.0 is getting closer to uniform probability."
     required: false
@@ -46,7 +46,7 @@ inputs:
   pullRequestChunkSize:
     description: "Pull request chunk size"
     required: false
-    default: "3500"
+    default: "0"
   logLevel:
     description: "Log level"
     required: false
