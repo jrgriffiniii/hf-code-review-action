@@ -9,6 +9,7 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+
 import json
 import os
 from typing import List
@@ -110,12 +111,12 @@ def get_review(
 
     summaries = []
     # This is the format required for Mistral and other LLMs
-    # Please see: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1
+    # Please see: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2
     prompt = ChatPromptTemplate.from_messages(
         [
             ("user", "Hello"),
             ("assistant", "Hello, I am a helpful AI software analyst. I assist software developers in reviewing and writing source code for applications."),
-            ("user", "Provide a very concise summary for the changes in a git diff generated from a pull request submitted by a developer on GitHub. Importantly, do not reference the usage of the `git diff` command or git commit hashes in the summary.\n\ngit diff: {diff}")
+            ("user", "Provide a very concise summary for the changes in a git diff generated from a pull request submitted by a developer on GitHub. Importantly, do not explain the 'git diff' command nor reference any git commit hashes in the summary.\n\ngit diff: {diff}")
         ],
     )
 
@@ -139,7 +140,7 @@ def get_review(
             [
                 ("user", "Hello"),
                 ("assistant", "Hello, I am a helpful AI software analyst. I assist software developers in reviewing and writing source code for applications."),
-                ("user", "Summarize the following changes in a git diff generated from a pull request submitted by a developer on GitHub. Importantly, include the line number of the change in the summary.\n\ngit diff: {changes}")
+                ("user", "Summarize the following changes in a git diff generated from a pull request submitted by a developer on GitHub. Importantly, include the line number of the change in the summary. The summary must not exceed 800 characters. Do not specify the total character count for the summary in the answer.\n\ngit diff: {changes}")
             ],
         )
 
@@ -161,7 +162,7 @@ def get_review(
             [
                 ("user", "Hello"),
                 ("assistant", "Hello, I am a helpful AI software analyst. I assist software developers in reviewing and writing source code for applications."),
-                ("user", "Analyze the following changes in a git diff generated from a pull request submitted by a developer on GitHub. If you are able to, determine if these proposed changes might be improved upon in any manner, and recommend any of these improvements.\n\ngit diff: {changes}")
+                ("user", "Analyze the following changes in a git diff generated from a pull request submitted by a developer on GitHub. If you are able to, determine if these proposed changes might be improved upon in any manner, and recommend any of these improvements. Your answer must not exceed 800 characters.\n\ngit diff: {changes}")
             ],
         )
 
@@ -186,17 +187,13 @@ def format_review_comment(summaries: List[str], reviews: List[str]) -> str:
     joined_summaries = "\n".join(summaries)
     joined_reviews = "\n".join(reviews)
 
-    comment = f"""<details>
-    <summary>{joined_summaries}</summary>
-    {joined_reviews}
-    </details>
-    """
+    comment = f"## Summary of Proposed Changes\n{joined_summaries}\n## Suggested Improvements\n{joined_reviews}"
 
     return comment
 
 @click.command()
-@click.option("--diff", type=click.STRING, required=True, help="File path to the diff generated for the pull request")
-@click.option("--diff-chunk-size", type=click.INT, required=False, default=3500, help="Pull request diff")
+@click.option("--diffs", type=click.STRING, required=True, help="Directory path to the file diffs generated for the pull request")
+@click.option("--diff-chunk-size", type=click.INT, required=False, default=3500, help="Maximum number of characters for diff chunks for analysis")
 @click.option("--repo-id", type=click.STRING, required=False, default="gpt-3.5-turbo", help="HuggingFace model repository ID")
 @click.option("--temperature", type=click.FLOAT, required=False, default=0.1, help="Temperature")
 @click.option("--max-new-tokens", type=click.INT, required=False, default=250, help="Max tokens")
@@ -204,7 +201,7 @@ def format_review_comment(summaries: List[str], reviews: List[str]) -> str:
 @click.option("--top-k", type=click.INT, required=False, default=1.0, help="Top T")
 @click.option("--log-level", type=click.STRING, required=False, default="INFO", help="Logging level")
 def main(
-    diff: str,
+    diffs: str,
     diff_chunk_size: int,
     repo_id: str,
     temperature: float,
@@ -220,35 +217,42 @@ def main(
     # Check if necessary environment variables are set or not
     check_required_env_vars()
 
-    # Open and read the contents from the file generated from `git diff`
-    fh = open(diff)
-    diff_content = fh.read()
-    fh.close()
-    logger.debug(f"git diff: {diff_content}")
+    for diff_file_name in os.listdir(diffs):
 
-    summaries, reviews = get_review(
-        diff=diff_content,
-        repo_id=repo_id,
-        temperature=temperature,
-        max_new_tokens=max_new_tokens,
-        top_p=top_p,
-        top_k=top_k,
-        prompt_chunk_size=diff_chunk_size
-    )
-    logger.debug(f"Summarized review: {summaries}")
-    logger.debug(f"Chunked reviews: {reviews}")
+        if not diff_file_name.endswith(".diff"):
+            continue
 
-    # Format reviews
-    review_comment = format_review_comment(summaries=summaries, reviews=reviews)
+        diff_file_path = os.path.join(diffs, diff_file_name)
 
-    # Create a comment to a pull request
-    create_a_comment_to_pull_request(
-        github_token=os.getenv("GH_TOKEN"),
-        github_repository=os.getenv("GITHUB_REPOSITORY"),
-        pull_request_number=int(os.getenv("GITHUB_PULL_REQUEST_NUMBER")),
-        git_commit_hash=os.getenv("GIT_COMMIT_HASH"),
-        body=review_comment
-    )
+        # Open and read the contents from the file generated from `git diff`
+        fh = open(diff_file_path)
+        diff_content = fh.read()
+        fh.close()
+        logger.debug(f"git diff: {diff_content}")
+
+        summaries, reviews = get_review(
+            diff=diff_content,
+            repo_id=repo_id,
+            temperature=temperature,
+            max_new_tokens=max_new_tokens,
+            top_p=top_p,
+            top_k=top_k,
+            prompt_chunk_size=diff_chunk_size
+        )
+        logger.debug(f"Summarized review: {summaries}")
+        logger.debug(f"Chunked reviews: {reviews}")
+
+        # Format reviews
+        review_comment = format_review_comment(summaries=summaries, reviews=reviews)
+
+        # Create a comment to a pull request
+        create_a_comment_to_pull_request(
+            github_token=os.getenv("GH_TOKEN"),
+            github_repository=os.getenv("GITHUB_REPOSITORY"),
+            pull_request_number=int(os.getenv("GITHUB_PULL_REQUEST_NUMBER")),
+            git_commit_hash=os.getenv("GIT_COMMIT_HASH"),
+            body=review_comment
+        )
 
 if __name__ == "__main__":
     # pylint: disable=no-value-for-parameter

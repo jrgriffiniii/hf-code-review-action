@@ -1,31 +1,32 @@
-# llm-code-review-action
-_This is a fork of the GitHub project originally authored by (https://github.com/luiyen/llm-code-review)[https://github.com/luiyen/llm-code-review]. Aside from some trivial modifications, all credit and praise is due to @luiyen._
+# hf-code-review-action
+## GitHub Action for Automating Code Review using Hugging Face
+_This is a fork of the GitHub project originally authored by (https://github.com/luiyen/llm-code-review)[https://github.com/luiyen/llm-code-review]. Aside from some trivial modifications, this is the labor of @luiyen, all credit and praise is due to them._
 
-A container GitHub Action to review a pull request by HuggingFace's LLM Model.
+A container GitHub Action to review a pull request using Hugging Face large-language models.
 
-If the size of a pull request is over the maximum chunk size of the HuggingFace API, the Action will split the pull request into multiple chunks and generate review comments for each chunk.
+If the size of a pull request is over the maximum chunk size of the Hugging Face API, the Action will split the pull request into multiple chunks and generate review comments for each chunk.
 And then the Action summarizes the review comments and posts a review comment to the pull request.
 
 ## Pre-requisites
-We have to set a GitHub Actions secret `HUGGING_FACE_API_KEY` to use the HuggingFace API so that we securely pass it to the Action.
+We have to set a GitHub Actions secret `HUGGINGFACEHUB_API_TOKEN` to use the Hugging Face API so that we securely pass it to the Action. Additionally, a secret `GH_TOKEN` must also be set in order to provide the permissions to post the comments on the Pull Request.
 
 ## Inputs
 
-- `apiKey`: The HuggingFace API key to access the API.
-- `githubToken`: The GitHub token to access the GitHub API.
+- `huggingFaceHubApiToken`: The Hugging Face API token generated to access the API.
+- `ghToken`: The GitHub token to access the GitHub API.
 - `githubRepository`: The GitHub repository to post a review comment.
 - `githubPullRequestNumber`: The GitHub pull request number to post a review comment.
 - `gitCommitHash`: The git commit hash to post a review comment.
-- `pullRequestDiff`: The diff of the pull request to generate a review comment.
+- `pullRequestDiffs`: A directory containing one or more `.diff` files generated from the Pull Request being reviewed.
 - `pullRequestDiffChunkSize`: The chunk size of the diff of the pull request to generate a review comment.
-- `repoId`: LLM repository id on HuggingFace.
-- `temperature`: The temperature to generate a review comment.
-- `topP`: The top_p to generate a review comment.
-- `topK`: The top_k to generate a review comment.
-- `maxNewTokens`: The max_tokens to generate a review comment.
-- `logLevel`: The log level to print logs.
+- `repoId`: The Hugging Face model repository ID.
+- `temperature`: The temperature for the Hugging Face model.
+- `topP`: The top_p for the Hugging Face model.
+- `topK`: The top_k for the Hugging Face model.
+- `maxNewTokens`: The max_tokens for the Hugging Face model.
+- `logLevel`: The logging verbosity level (for troubleshooting).
 
-As you might know, a model of HuggingFace has limitation of the maximum number of input tokens.
+As you might know, a model of Hugging Face has limitation of the maximum number of input tokens.
 So we have to split the diff of a pull request into multiple chunks, if the size of the diff is over the limitation.
 We can tune the chunk size based on the model we use.
 
@@ -35,10 +36,14 @@ The actual file is located at [`.github/workflows/test-action.yml`](.github/work
 
 
 ```yaml
-name: "Test Code Review"
+name: "Test the Hugging Face Code Review"
 
 on:
   pull_request:
+    types:
+      - open
+      - synchronize
+      - ready_for_review
     paths-ignore:
       - "*.md"
       - "LICENSE"
@@ -55,29 +60,34 @@ jobs:
         id: get_diff
         shell: bash
         env:
+          DEFAULT_BRANCH: "${{ github.event.repository.default_branch }}"
           PULL_REQUEST_HEAD_REF: "${{ github.event.pull_request.head.ref }}"
         run: |-
-          git fetch origin "${{ env.PULL_REQUEST_HEAD_REF }}:${{ env.PULL_REQUEST_HEAD_REF }}"
-          git checkout "${{ env.PULL_REQUEST_HEAD_REF }}"
-          git diff "origin/${{ env.PULL_REQUEST_HEAD_REF }}" > "diff.txt"
-          # shellcheck disable=SC2086
-          echo "diff=$(cat "diff.txt")" >> $GITHUB_ENV
-      - uses: jrgriffiniii/llm-code-review@v0.0.1
-        name: "Code Review"
-        id: review
+          # Fetch the default branch
+          git fetch origin "${{ env.DEFAULT_BRANCH }}"
+          # Include only source code files for the diff
+          git diff "origin/${{ env.DEFAULT_BRANCH }}" --name-only > files.diff
+          IDX=0
+          while read GIT_DIFF_FILE; do
+            echo $GIT_DIFF_FILE
+            git diff "origin/${{ env.DEFAULT_BRANCH }}" $GIT_DIFF_FILE > .diffs/$IDX.diff
+            ((IDX+=1))
+          done < files.diff
+      - uses: ./
+        name: "Hugging Face Code Review"
+        id: hf_review
         with:
-          apiKey: ${{ secrets.API_KEY }}
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          huggingFaceHubApiToken: ${{ secrets.HUGGINGFACEHUB_API_TOKEN }}
+          ghToken: ${{ secrets.GH_TOKEN }}
           githubRepository: ${{ github.repository }}
           githubPullRequestNumber: ${{ github.event.pull_request.number }}
           gitCommitHash: ${{ github.event.pull_request.head.sha }}
-          repoId: "meta-llama/Llama-2-7b-chat-hf"
-          temperature: "0.2"
+          repoId: "mistralai/Mistral-7B-Instruct-v0.2"
+          temperature: "0.1"
           maxNewTokens: "250"
-          topK: "50"
+          topK: "10"
           topP: "0.95"
-          pullRequestDiff: |-
-            ${{ steps.get_diff.outputs.pull_request_diff }}
+          pullRequestDiffs: "./.diffs"
           pullRequestChunkSize: "3500"
           logLevel: "DEBUG"
 ```

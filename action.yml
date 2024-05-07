@@ -1,5 +1,5 @@
-name: 'Automated Code Review using HuggingFace'
-description: 'A container GitHub Action to review a pull request by HuggingFace LLM Model.'
+name: 'Automated Code Review using Hugging Face'
+description: 'A container GitHub Action to review a pull request by Hugging Face LLM Model.'
 author: 'Louis Le (luiyen)'
 inputs:
   ghToken:
@@ -21,9 +21,9 @@ inputs:
     required: true
     default: "${{ github.event.pull_request.head.sha }}"
   repoId:
-    description: "HuggingFace model repository ID"
+    description: "Hugging Face model repository ID"
     required: true
-    default: "mistralai/Mistral-7B-Instruct-v0.1"
+    default: "mistralai/Mistral-7B-Instruct-v0.2"
   maxNewTokens:
     description: "The amount of new tokens to be generated, this does not include the input length it is a estimate of the size of generated text you want. Each new tokens slows down the request, so look for balance between response times and length of text generated."
     required: false
@@ -40,7 +40,7 @@ inputs:
     description: "Float to define the tokens that are within the sample operation of text generation. Add tokens in the sample for more probable to least probable until the sum of the probabilities is greater than top_p."
     required: false
     default: "0.95"
-  pullRequestDiff:
+  pullRequestDiffs:
     description: "Pull request diff"
     required: true
   pullRequestChunkSize:
@@ -66,6 +66,6 @@ runs:
     - "--max-new-tokens=${{ inputs.maxNewTokens }}"
     - "--top-p=${{ inputs.topP }}"
     - "--top-k=${{ inputs.topK }}"
-    - "--diff=${{ inputs.pullRequestDiff }}"
+    - "--diffs=${{ inputs.pullRequestDiffs }}"
     - "--diff-chunk-size=${{ inputs.pullRequestChunkSize }}"
     - "--log-level=${{ inputs.logLevel }}"
