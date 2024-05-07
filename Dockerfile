@@ -21,7 +21,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the entrypoint script
 COPY entrypoint.py .
 
-# Copy the git diff from the pull request
-COPY pr.diff .
+# COPY pr.diff .
+RUN mkdir -p /app/.diffs
+COPY ./.diffs/ /app/.diffs/
 
 ENTRYPOINT ["python", "/app/entrypoint.py"]

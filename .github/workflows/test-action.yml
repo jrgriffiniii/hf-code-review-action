@@ -10,10 +10,14 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-name: "Test the HuggingFace Code Review"
+name: "Test the Hugging Face Code Review"
 
 on:
   pull_request:
+    types:
+      - open
+      - synchronize
+      - ready_for_review
     paths-ignore:
       - "*.md"
       - "LICENSE"
@@ -36,9 +40,15 @@ jobs:
           # Fetch the default branch
           git fetch origin "${{ env.DEFAULT_BRANCH }}"
           # Include only source code files for the diff
-          git diff "origin/${{ env.DEFAULT_BRANCH }}" > pr.diff
+          git diff "origin/${{ env.DEFAULT_BRANCH }}" --name-only > files.diff
+          IDX=0
+          while read GIT_DIFF_FILE; do
+            echo $GIT_DIFF_FILE
+            git diff "origin/${{ env.DEFAULT_BRANCH }}" $GIT_DIFF_FILE > .diffs/$IDX.diff
+            ((IDX+=1))
+          done < files.diff
       - uses: ./
-        name: "HuggingFace Code Review"
+        name: "Hugging Face Code Review"
         id: hf_review
         with:
           huggingFaceHubApiToken: ${{ secrets.HUGGINGFACEHUB_API_TOKEN }}
@@ -46,11 +56,11 @@ jobs:
           githubRepository: ${{ github.repository }}
           githubPullRequestNumber: ${{ github.event.pull_request.number }}
           gitCommitHash: ${{ github.event.pull_request.head.sha }}
-          repoId: "mistralai/Mistral-7B-Instruct-v0.1"
+          repoId: "mistralai/Mistral-7B-Instruct-v0.2"
           temperature: "0.1"
           maxNewTokens: "250"
           topK: "10"
           topP: "0.95"
-          pullRequestDiff: "./pr.diff"
+          pullRequestDiffs: "./.diffs"
           pullRequestChunkSize: "3500"
           logLevel: "DEBUG"
