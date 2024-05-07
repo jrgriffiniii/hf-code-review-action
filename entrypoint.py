@@ -22,8 +22,8 @@ from loguru import logger
 def check_required_env_vars():
     """Check required environment variables"""
     required_env_vars = [
-        "HUGGING_FACE_HUB_TOKEN",
-        "GITHUB_TOKEN",
+        "HUGGINGFACEHUB_API_TOKEN",
+        "GH_TOKEN",
         "GITHUB_REPOSITORY",
         "GITHUB_PULL_REQUEST_NUMBER",
         "GIT_COMMIT_HASH",
@@ -82,7 +82,7 @@ def get_review(
                       "max_new_tokens": max_new_tokens,
                       "top_p": top_p,
                       "top_k": top_k},
-                      huggingfacehub_api_token=os.getenv("HUGGING_FACE_HUB_TOKEN")
+                      huggingfacehub_api_token=os.getenv("HUGGINGFACEHUB_API_TOKEN")
     )
     for chunked_diff in chunked_diff_list:
         question=chunked_diff
@@ -175,7 +175,7 @@ def main(
                                            chunked_reviews=chunked_reviews)
     # Create a comment to a pull request
     create_a_comment_to_pull_request(
-        github_token=os.getenv("GITHUB_TOKEN"),
+        github_token=os.getenv("GH_TOKEN"),
         github_repository=os.getenv("GITHUB_REPOSITORY"),
         pull_request_number=int(os.getenv("GITHUB_PULL_REQUEST_NUMBER")),
         git_commit_hash=os.getenv("GIT_COMMIT_HASH"),
