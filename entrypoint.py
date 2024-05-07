@@ -12,7 +12,7 @@
 
 import json
 import os
-from typing import List
+from typing import Any, List
 
 import click
 import requests
@@ -39,102 +39,165 @@ def check_required_env_vars():
         if os.getenv(required_env_var) is None:
             raise ValueError(f"{required_env_var} is not set")
 
-def create_a_comment_to_pull_request(
-        github_token: str,
-        github_repository: str,
-        pull_request_number: int,
-        git_commit_hash: str,
-        body: str):
-    """Create a comment to a pull request"""
-    headers = {
-        "Accept": "application/vnd.github.v3.patch",
-        "authorization": f"Bearer {github_token}"
-    }
-    data = {
-        "body": body,
-        "commit_id": git_commit_hash,
-        "event": "COMMENT"
-    }
-    url = f"https://api.github.com/repos/{github_repository}/pulls/{pull_request_number}/reviews"
-    response = requests.post(url, headers=headers, data=json.dumps(data))
-    return response
+class PullRequest:
 
-def chunk_string(input_string: str, chunk_size) -> List[str]:
-    """Chunk a string"""
+    def __init__(self, github_token: str, repository: str, number: int):
 
-    chunked_inputs = []
-    for i in range(0, len(input_string), chunk_size):
-        chunked_inputs.append(input_string[i:i + chunk_size])
-    return chunked_inputs
+        self._github_token = github_token
+        self._repository = repository
+        self._number = number
 
-def get_review(
-        repo_id: str,
-        diff: str,
-        temperature: float,
-        max_new_tokens: int,
-        top_p: float,
-        top_k: int,
-        prompt_chunk_size: int
-):
-    """Get a review"""
-    # Chunk the prompt
-    chunks = chunk_string(input_string=diff, chunk_size=prompt_chunk_size)
+    def comment(self, commit_hash: str, body: str):
+        """Create a comment to a pull request"""
 
+        headers = {
+            "Accept": "application/vnd.github.v3.patch",
+            "authorization": f"Bearer {self._github_token}"
+        }
+
+        params = {
+            "commit_id": commit_hash,
+            "body": body,
+            "event": "COMMENT"
+        }
+
+        url = f"https://api.github.com/repos/{self._repository}/pulls/{self._number}/reviews"
+        data = json.dumps(params)
+        response = requests.post(url, headers=headers, data=data)
+
+        return response
+
+class DiffIterator:
+
+    def __init__(self, diff: str, chunk_size: int):
+
+        self._diff = diff
+        self._chunk_size = chunk_size
+
+        length = len(self._diff)
+        self._length = length
+
+        self._index = 0
+
+    def __iter__(self):
+
+        return self
+
+    def __next__(self):
+
+        if self._index > self._length:
+            raise StopIteration
+        else:
+            self._index += self._chunk_size
+            slice = self._index + self._chunk_size
+            chunk = self._diff[self._index:slice]
+
+            return chunk
+
+    def chunk_string(self) -> List[str]:
+        """Chunk a string"""
+
+        chunked_inputs = []
+        for i in range(0, self._length, self._chunk_size):
+            slice = i + self._chunk_size
+            chunk = self._diff[i:slice]
+            chunked_inputs.append(chunk)
+
+        return chunked_inputs
+
+class HuggingFaceReviewer:
+    task = "text-generation"
     # There are likely more performant models
     # Please see https://www.sbert.net/docs/pretrained_models.html
     embedding_model = "sentence-transformers/all-mpnet-base-v2"
     embedding_task = "feature-extraction"
-    embeddings = HuggingFaceHubEmbeddings(
-        model=embedding_model,
-        task=embedding_task,
-    )
 
-    task = "text-generation"
-    # Update this
-    hugging_face_repo_id = repo_id
+    def __init__(self, repo_id: str, temperature: float, max_new_tokens: int, top_p: float, top_k: int):
 
-    endpoint = HuggingFaceEndpoint(
-        repo_id=hugging_face_repo_id,
-        task=task,
-        max_new_tokens=max_new_tokens,
-        temperature=temperature,
-        top_k=top_k,
-        top_p=top_p,
-        huggingfacehub_api_token=os.getenv("HUGGINGFACEHUB_API_TOKEN")
-    )
+        self._repo_id = repo_id
+        self._temperature = temperature
+        self._max_new_tokens = max_new_tokens
+        self._top_p = top_p
+        self._top_k = top_k
 
-    tokenizer = AutoTokenizer.from_pretrained(hugging_face_repo_id)
-    llm = ChatHuggingFace(
-        llm=endpoint,
-        tokenizer=tokenizer
-    )
+        self._huggingfacehub_api_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
 
-    summaries = []
-    # This is the format required for Mistral and other LLMs
-    # Please see: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("user", "Hello"),
-            ("assistant", "Hello, I am a helpful AI software analyst. I assist software developers in reviewing and writing source code for applications."),
-            ("user", "Provide a very concise summary for the changes in a git diff generated from a pull request submitted by a developer on GitHub. Importantly, do not explain the 'git diff' command nor reference any git commit hashes in the summary.\n\ngit diff: {diff}")
-        ],
-    )
+    def build_embedding(self):
 
-    chain = (
-        prompt
-        | llm
-        | StrOutputParser()
-    )
+        cls = self.__class__
 
-    inputs = {
-        'diff': diff
-    }
+        embeddings = HuggingFaceHubEmbeddings(
+            model=cls.embedding_model,
+            task=cls.embedding_task,
+        )
+        self._embeddings = embeddings
 
-    summary = chain.invoke(inputs)
-    summaries.append(summary)
+        return self._embeddings
 
-    reviews = []
-    for changes in chunks:
+    def build_endpoint(self):
+
+        cls = self.__class__
+
+        endpoint = HuggingFaceEndpoint(
+            repo_id=self._repo_id,
+            task=cls.task,
+            max_new_tokens=self._max_new_tokens,
+            temperature=self._temperature,
+            top_p=self._top_p,
+            top_k=self._top_k,
+            huggingfacehub_api_token=self._huggingfacehub_api_token
+        )
+        self._endpoint = endpoint
+
+        return self._endpoint
+
+    def build_tokenizer(self):
+
+        tokenizer = AutoTokenizer.from_pretrained(self._repo_id)
+        self._tokenizer = tokenizer
+
+        return self._tokenizer
+
+    def build_model(self):
+
+        self.build_endpoint()
+        self.build_tokenizer()
+
+        model = ChatHuggingFace(
+            llm=self._endpoint,
+            tokenizer=self._tokenizer
+        )
+        self._model = model
+
+        return self._model
+
+    def generate_summary(self, diff: str):
+
+        # This is the format required for Mistral and other LLMs
+        # Please see: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("user", "Hello"),
+                ("assistant", "Hello, I am a helpful AI software analyst. I assist software developers in reviewing and writing source code for applications."),
+                ("user", "Provide a very concise summary for the changes in a git diff generated from a pull request submitted by a developer on GitHub. Importantly, do not explain the 'git diff' command nor reference any git commit hashes in the summary.\n\ngit diff: {diff}")
+            ],
+        )
+
+        chain = (
+            prompt
+            | self._model
+            | StrOutputParser()
+        )
+
+        inputs = {
+            'diff': diff
+        }
+
+        summary = chain.invoke(inputs)
+
+        return summary
+
+    def generate_review(self, changes: str):
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -146,7 +209,7 @@ def get_review(
 
         chain = (
             prompt
-            | llm
+            | self._model
             | StrOutputParser()
         )
 
@@ -155,7 +218,10 @@ def get_review(
         }
 
         review = chain.invoke(inputs)
-        reviews.append(review)
+
+        return review
+
+    def generate_suggestion(self, changes: str):
 
         # Prompt for suggested improvements
         prompt = ChatPromptTemplate.from_messages(
@@ -168,7 +234,7 @@ def get_review(
 
         chain = (
             prompt
-            | llm
+            | self._model
             | StrOutputParser()
         )
 
@@ -177,19 +243,52 @@ def get_review(
         }
 
         suggestion = chain.invoke(inputs)
-        reviews.append(suggestion)
 
-    return summaries, reviews
+        return suggestion
 
-def format_review_comment(summaries: List[str], reviews: List[str]) -> str:
-    """Format reviews"""
+    def invoke(
+        self,
+        diff: str,
+        diff_chunk_size: int
+    ):
+        """Generate the summary, review, and suggested improvements"""
 
-    joined_summaries = "\n".join(summaries)
-    joined_reviews = "\n".join(reviews)
+        # Chunk the prompt
+        diff_iter = DiffIterator(diff=diff, chunk_size=diff_chunk_size)
 
-    comment = f"## Summary of Proposed Changes\n{joined_summaries}\n## Suggested Improvements\n{joined_reviews}"
+        self.build_model()
 
-    return comment
+        summary = self.generate_summary(diff=diff)
+        summaries = [summary]
+
+        reviews = []
+        suggestions = []
+        for changes in diff_iter:
+
+            review = self.generate_review(changes=changes)
+            reviews.append(review)
+
+            suggestion = self.generate_suggestion(changes=changes)
+            # Suggested improvements are appended directly beneath the overview
+            reviews.append(suggestion)
+
+        return summaries, reviews
+
+class ReviewComment:
+    delimiter = "\n"
+    summaries_header = "## Summary of Proposed Changes"
+    reviews_header = "## Suggested Improvements"
+
+    @classmethod
+    def format(cls, summaries: List[str], reviews: List[str]) -> str:
+        """Format reviews"""
+
+        joined_summaries = cls.delimiter.join(summaries)
+        joined_reviews = cls.delimiter.join(reviews)
+
+        comment = f"{cls.summaries_header}{cls.delimiter}{joined_summaries}{cls.delimiter}{cls.reviews_header}{cls.delimiter}{joined_reviews}"
+
+        return comment
 
 @click.command()
 @click.option("--diffs", type=click.STRING, required=True, help="Directory path to the file diffs generated for the pull request")
@@ -226,33 +325,37 @@ def main(
 
         # Open and read the contents from the file generated from `git diff`
         fh = open(diff_file_path)
-        diff_content = fh.read()
+        file_diff = fh.read()
         fh.close()
-        logger.debug(f"git diff: {diff_content}")
 
-        summaries, reviews = get_review(
-            diff=diff_content,
+        logger.debug(f"git diff: {file_diff}")
+
+        reviewer = HuggingFaceReviewer(
             repo_id=repo_id,
             temperature=temperature,
             max_new_tokens=max_new_tokens,
             top_p=top_p,
             top_k=top_k,
-            prompt_chunk_size=diff_chunk_size
         )
-        logger.debug(f"Summarized review: {summaries}")
-        logger.debug(f"Chunked reviews: {reviews}")
+
+        summaries, reviews = reviewer.invoke(diff=file_diff, diff_chunk_size=diff_chunk_size)
+
+        logger.debug(f"Generated summaries: {summaries}")
+        logger.debug(f"Generated reviews: {reviews}")
 
         # Format reviews
-        review_comment = format_review_comment(summaries=summaries, reviews=reviews)
+        comment = ReviewComment.format(summaries=summaries, reviews=reviews)
 
-        # Create a comment to a pull request
-        create_a_comment_to_pull_request(
-            github_token=os.getenv("GH_TOKEN"),
-            github_repository=os.getenv("GITHUB_REPOSITORY"),
-            pull_request_number=int(os.getenv("GITHUB_PULL_REQUEST_NUMBER")),
-            git_commit_hash=os.getenv("GIT_COMMIT_HASH"),
-            body=review_comment
-        )
+        logger.debug(f"GitHub comment: {comment}")
+
+        github_token = os.getenv("GH_TOKEN")
+        repository = os.getenv("GITHUB_REPOSITORY")
+        pull_request_number_env = os.getenv("GITHUB_PULL_REQUEST_NUMBER")
+        pull_request_number = int(pull_request_number_env)
+        git_commit_hash = os.getenv("GIT_COMMIT_HASH")
+
+        pull_request = PullRequest(github_token=github_token, repository=repository, number=pull_request_number)
+        pull_request.comment(commit_hash=git_commit_hash, body=comment)
 
 if __name__ == "__main__":
     # pylint: disable=no-value-for-parameter
