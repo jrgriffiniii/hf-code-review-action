@@ -14,10 +14,6 @@ name: "Test the Hugging Face Code Review"
 
 on:
   pull_request:
-    types:
-      - open
-      - synchronize
-      - ready_for_review
     paths-ignore:
       - "*.md"
       - "LICENSE"
@@ -40,7 +36,7 @@ jobs:
           # Fetch the default branch
           git fetch origin "${{ env.DEFAULT_BRANCH }}"
           # Include only source code files for the diff
-          git diff "origin/${{ env.DEFAULT_BRANCH }}" --name-only > files.diff
+          git diff "origin/${{ env.DEFAULT_BRANCH }}" --name-only ':(exclude)*lock' > files.diff
           IDX=0
           while read GIT_DIFF_FILE; do
             echo $GIT_DIFF_FILE
@@ -58,9 +54,7 @@ jobs:
           gitCommitHash: ${{ github.event.pull_request.head.sha }}
           repoId: "mistralai/Mistral-7B-Instruct-v0.2"
           temperature: "0.1"
-          maxNewTokens: "250"
           topK: "10"
           topP: "0.95"
           pullRequestDiffs: "./.diffs"
-          pullRequestChunkSize: "3500"
           logLevel: "DEBUG"

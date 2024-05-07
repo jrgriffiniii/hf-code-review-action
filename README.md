@@ -1,16 +1,22 @@
 # hf-code-review-action
-## GitHub Action for Automating Code Review using Hugging Face
-_This is a fork of the GitHub project originally authored by (https://github.com/luiyen/llm-code-review)[https://github.com/luiyen/llm-code-review]. Aside from some trivial modifications, this is the labor of @luiyen, all credit and praise is due to them._
+
+**GitHub Action for Automating Code Review using Hugging Face**
+_This is a fork of the GitHub project originally released as [https://github.com/luiyen/llm-code-review](https://github.com/luiyen/llm-code-review). Aside from some trivial modifications, this is the labor of @luiyen, all credit and praise is due to them._
+
+## Overview
 
 A container GitHub Action to review a pull request using Hugging Face large-language models.
 
 If the size of a pull request is over the maximum chunk size of the Hugging Face API, the Action will split the pull request into multiple chunks and generate review comments for each chunk.
 And then the Action summarizes the review comments and posts a review comment to the pull request.
 
-## Pre-requisites
+## Using the GitHub Action
+
+### Pre-Requisites
+
 We have to set a GitHub Actions secret `HUGGINGFACEHUB_API_TOKEN` to use the Hugging Face API so that we securely pass it to the Action. Additionally, a secret `GH_TOKEN` must also be set in order to provide the permissions to post the comments on the Pull Request.
 
-## Inputs
+### Inputs
 
 - `huggingFaceHubApiToken`: The Hugging Face API token generated to access the API.
 - `ghToken`: The GitHub token to access the GitHub API.
@@ -30,20 +36,14 @@ As you might know, a model of Hugging Face has limitation of the maximum number 
 So we have to split the diff of a pull request into multiple chunks, if the size of the diff is over the limitation.
 We can tune the chunk size based on the model we use.
 
-## Example usage
-Here is an example to use the Action to review a pull request of the repository.
-The actual file is located at [`.github/workflows/test-action.yml`](.github/workflows/test-action.yml).
-
+### Example usage
+Here is an example to use the Action to review a pull request of the repository. The actual file is located at [`.github/workflows/test-action.yml`](.github/workflows/test-action.yml).
 
 ```yaml
 name: "Test the Hugging Face Code Review"
 
 on:
   pull_request:
-    types:
-      - open
-      - synchronize
-      - ready_for_review
     paths-ignore:
       - "*.md"
       - "LICENSE"
@@ -88,6 +88,48 @@ jobs:
           topK: "10"
           topP: "0.95"
           pullRequestDiffs: "./.diffs"
-          pullRequestChunkSize: "3500"
           logLevel: "DEBUG"
 ```
+
+## Local Development
+
+### Python
+
+#### Installing the Package Dependencies
+
+```bash
+mise install
+pipenv install
+pipenv install --dev
+```
+
+#### Linting
+
+##### PyLint
+
+```bash
+pipenv run lint
+```
+
+##### Black
+
+```bash
+pipenv run black-lint
+# For autocorrecting the any style violations
+pipenv run black-fix
+```
+
+### Docker
+
+#### Building the Base Image
+
+```bash
+docker buildx build -t jrgriffiniii/hf-code-review-action:base -f Dockerfile.base .
+```
+
+#### Building the Image for the GitHub Action
+
+```bash
+docker buildx build -t jrgriffiniii/hf-code-review-action:latest .
+```
+

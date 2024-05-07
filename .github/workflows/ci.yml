@@ -1,0 +1,14 @@
+name: ci
+run-name: Continuous Integration
+
+on: [push]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - run: pip3 install pipenv
+      - run: pipenv install --dev
+      - run: pipenv run lint
