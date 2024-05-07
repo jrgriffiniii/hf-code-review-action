@@ -48,7 +48,7 @@ jobs:
         name: "Code Review"
         id: review
         with:
-          apiKey: ${{ secrets.API_KEY }}
+          huggingFaceHubToken: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           githubRepository: ${{ github.repository }}
           githubPullRequestNumber: ${{ github.event.pull_request.number }}

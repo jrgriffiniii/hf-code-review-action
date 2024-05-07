@@ -5,7 +5,7 @@ inputs:
   githubToken:
     description: 'Github token to access the repo'
     required: true
-  apiKey:
+  huggingFaceHubToken:
     description: 'Huggingface access token from [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)'
     required: true
   githubRepository:
@@ -55,7 +55,7 @@ runs:
   using: docker
   image: Dockerfile
   env:
-    API_KEY: ${{ inputs.apiKey }}
+    HUGGING_FACE_HUB_TOKEN: ${{ inputs.huggingFaceHubToken }}
     GITHUB_TOKEN: ${{ inputs.githubToken }}
     GITHUB_REPOSITORY: ${{ inputs.githubRepository }}
     GITHUB_PULL_REQUEST_NUMBER: ${{ inputs.githubPullRequestNumber }}

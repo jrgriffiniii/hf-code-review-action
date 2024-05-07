@@ -22,7 +22,7 @@ from loguru import logger
 def check_required_env_vars():
     """Check required environment variables"""
     required_env_vars = [
-        "API_KEY",
+        "HUGGING_FACE_HUB_TOKEN",
         "GITHUB_TOKEN",
         "GITHUB_REPOSITORY",
         "GITHUB_PULL_REQUEST_NUMBER",
@@ -82,7 +82,7 @@ def get_review(
                       "max_new_tokens": max_new_tokens,
                       "top_p": top_p,
                       "top_k": top_k},
-                      huggingfacehub_api_token=os.getenv("API_KEY")
+                      huggingfacehub_api_token=os.getenv("HUGGING_FACE_HUB_TOKEN")
     )
     for chunked_diff in chunked_diff_list:
         question=chunked_diff
